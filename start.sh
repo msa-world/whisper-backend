@@ -6,8 +6,8 @@ PORT="${PORT:-8000}"
 
 echo "Starting Whisper Cloud API on port $PORT..."
 # Start the FastAPI web service in the background
-uvicorn cloud_api:app --host 0.0.0.0 --port $PORT &
+uv run uvicorn cloud_api:app --host 0.0.0.0 --port $PORT &
 
 echo "Starting Whisper Voice Agent..."
 # Start the LiveKit voice agent in the foreground so the container stays alive
-python agent_friday.py start
+uv run python whisper_agent.py dev
