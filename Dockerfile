@@ -16,13 +16,17 @@ ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
 WORKDIR /app
 
 # Copy dependency files first for better caching
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install dependencies using uv
-RUN uv sync --frozen
+# Use --no-install-project to bypass building the project itself (which requires full source)
+RUN uv sync --frozen --no-install-project
 
 # Copy the rest of the application code
 COPY . .
+
+# Final sync to install the project (scripts and package metadata)
+RUN uv sync --frozen
 
 # Ensure start.sh is executable
 RUN chmod +x start.sh
