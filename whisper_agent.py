@@ -33,6 +33,7 @@ from livekit.agents.voice import Agent, AgentSession
 from livekit.plugins import silero
 from livekit.plugins import groq as lk_groq
 from livekit.plugins import google as lk_google
+from livekit.plugins import openai as lk_openai
 from livekit.plugins import deepgram
 import google_tools
 
@@ -52,6 +53,7 @@ if not logging.getLogger().handlers:
 
 GROQ_LLM_MODEL   = os.getenv("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
 GOOGLE_LLM_MODEL = os.getenv("GOOGLE_LLM_MODEL", "gemini-2.5-flash")
+OPENAI_LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4.1-mini")
 LLM_PROVIDER     = os.getenv("LLM_PROVIDER", "auto").strip().lower()
 ROOM_NAME        = os.getenv("LIVEKIT_ROOM_NAME", "whisper-room")
 AGENT_NAME       = os.getenv("LIVEKIT_AGENT_NAME", "whisper-assistant")
@@ -531,23 +533,44 @@ def _make_google_llm() -> lk_google.LLM:
     )
 
 
+def _make_openai_llm() -> lk_openai.LLM:
+    """Create an OpenAI LLM instance using OPENAI_API_KEY."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OpenAI LLM requested but OPENAI_API_KEY is not configured.")
+
+    logger.info("Creating OpenAI LLM using model %s", OPENAI_LLM_MODEL)
+    return lk_openai.LLM(
+        model=OPENAI_LLM_MODEL,
+        api_key=api_key,
+    )
+
+
 def _make_llm():
     """Create the configured LLM with fallback so quota/rate-limit issues don't stall turns."""
     has_google = bool(os.getenv("GOOGLE_API_KEY"))
     has_groq = bool(_GROQ_KEYS)
+    has_openai = bool(os.getenv("OPENAI_API_KEY"))
 
-    if not has_google and not has_groq:
+    if not has_google and not has_groq and not has_openai:
         raise RuntimeError(
-            "No LLM provider configured. Set GOOGLE_API_KEY or GROQ_API_KEY/GROQ_API_KEY_1."
+            "No LLM provider configured. Set GOOGLE_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY/GROQ_API_KEY_1."
         )
 
     preferred_order: list[str]
     if LLM_PROVIDER == "gemini":
-        preferred_order = ["gemini", "groq"]
+        preferred_order = ["gemini", "groq", "openai"]
     elif LLM_PROVIDER == "groq":
-        preferred_order = ["groq", "gemini"]
+        preferred_order = ["groq", "openai", "gemini"]
+    elif LLM_PROVIDER == "openai":
+        preferred_order = ["openai", "groq", "gemini"]
     else:
-        preferred_order = ["groq", "gemini"] if has_groq else ["gemini", "groq"]
+        if has_groq:
+            preferred_order = ["groq", "openai", "gemini"]
+        elif has_openai:
+            preferred_order = ["openai", "groq", "gemini"]
+        else:
+            preferred_order = ["gemini", "groq", "openai"]
 
     llms: list = []
     for provider_name in preferred_order:
@@ -556,6 +579,8 @@ def _make_llm():
                 llms.append(_make_groq_llm(api_key=key, key_index=idx))
         elif provider_name == "gemini" and has_google:
             llms.append(_make_google_llm())
+        elif provider_name == "openai" and has_openai:
+            llms.append(_make_openai_llm())
 
     if not llms:
         raise RuntimeError("Unable to build LLM configuration from environment settings.")
