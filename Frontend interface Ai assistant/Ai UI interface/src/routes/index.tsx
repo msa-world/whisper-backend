@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DnaWave } from "@/components/orb/DnaWave";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
+import { fetchBrowserApiJson } from "@/utils/browserApi";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -45,12 +46,44 @@ export function Index() {
 
   const updateUsage = async () => {
     try {
-      // @ts-ignore
-      const groq = await window.pywebview.api.get_groq_usage();
-      // @ts-ignore
-      const eleven = await window.pywebview.api.get_elevenlabs_usage();
-      if (groq.ok) setGroqUsage(groq.requests);
-      if (eleven.ok) setElevenUsage(eleven);
+      if (window.pywebview?.api) {
+        // @ts-ignore
+        const groq = await window.pywebview.api.get_groq_usage();
+        // @ts-ignore
+        const eleven = await window.pywebview.api.get_elevenlabs_usage();
+        if (groq.ok) setGroqUsage(groq.requests);
+        if (eleven.ok) setElevenUsage(eleven);
+        return;
+      }
+
+      const groq = await fetchBrowserApiJson<{
+        remaining_requests?: number | string;
+      }>("/usage/groq");
+      const eleven = await fetchBrowserApiJson<{
+        character_count?: number;
+        character_limit?: number;
+      }>("/usage/elevenlabs");
+
+      if (groq.remaining_requests !== undefined && groq.remaining_requests !== "unknown") {
+        const limit = 30;
+        const remaining = Number(groq.remaining_requests);
+        const used = Math.max(0, limit - remaining);
+        setGroqUsage({
+          limit,
+          used,
+          pct: Math.round((used / Math.max(1, limit)) * 100),
+        });
+      }
+
+      if (eleven.character_limit !== undefined) {
+        const used = Number(eleven.character_count || 0);
+        const limit = Number(eleven.character_limit || 10000);
+        setElevenUsage({
+          used,
+          limit,
+          pct: Math.round((used / Math.max(1, limit)) * 100),
+        });
+      }
     } catch (error) {
       console.warn("Usage fetch failed", error);
     }

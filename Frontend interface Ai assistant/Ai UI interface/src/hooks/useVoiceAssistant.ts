@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as LivekitClient from "livekit-client";
+import { fetchBrowserApiJson, getBrowserApiBase } from "@/utils/browserApi";
 
 type Status = "idle" | "listening" | "speaking" | "connecting" | "error";
 
@@ -121,8 +122,16 @@ export function useVoiceAssistant() {
     console.log("[Whisper] Connecting...");
 
     try {
-      // @ts-ignore
-      const config = await window.pywebview.api.get_livekit_config();
+      let config;
+      if (window.pywebview && window.pywebview.api) {
+        // @ts-ignore
+        config = await window.pywebview.api.get_livekit_config();
+      } else {
+        console.warn(
+          `[Whisper] pywebview not found, using browser API at ${getBrowserApiBase()}`,
+        );
+        config = await fetchBrowserApiJson("/livekit/config");
+      }
       const { url, token } = config;
       if (!url || !token) throw new Error("Missing LiveKit URL or token");
 

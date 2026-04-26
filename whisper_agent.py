@@ -27,6 +27,13 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
+import multiprocessing
+if sys.platform == "win32":
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
+
 from livekit.agents import JobContext, WorkerOptions, cli, room_io
 from livekit.agents import llm as lk_llm
 from livekit.agents.voice import Agent, AgentSession
@@ -59,6 +66,7 @@ ROOM_NAME        = os.getenv("LIVEKIT_ROOM_NAME", "whisper-room")
 AGENT_NAME       = os.getenv("LIVEKIT_AGENT_NAME", "whisper-assistant")
 DESKTOP_GREETING = os.getenv("DESKTOP_GREETING", "Whisper is online. How can I help you?")
 WHATSAPP_DEFAULT_PHONE = os.getenv("WHATSAPP_DEFAULT_PHONE", "").strip()
+MIN_LLM_ATTEMPT_TIMEOUT = 10.5
 if LLM_PROVIDER == "fallback":
     LLM_PROVIDER = "auto"
 if LLM_PROVIDER == "google":
@@ -588,17 +596,18 @@ def _make_llm():
     if len(llms) == 1:
         return llms[0]
 
-    timeout_raw = os.getenv("LLM_ATTEMPT_TIMEOUT", "8.0")
+    timeout_raw = os.getenv("LLM_ATTEMPT_TIMEOUT", "12.0")
     try:
-        attempt_timeout = max(2.0, float(timeout_raw))
+        attempt_timeout = max(MIN_LLM_ATTEMPT_TIMEOUT, float(timeout_raw))
     except ValueError:
-        attempt_timeout = 8.0
+        attempt_timeout = 12.0
 
     chain = " -> ".join(f"{llm.provider}:{llm.model}" for llm in llms)
     logger.warning(
-        "LLM failover chain enabled (%s). Preferred provider: %s",
+        "LLM failover chain enabled (%s). Preferred provider: %s. Attempt timeout: %.1fs",
         chain,
         LLM_PROVIDER,
+        attempt_timeout,
     )
     return lk_llm.FallbackAdapter(
         llm=llms,

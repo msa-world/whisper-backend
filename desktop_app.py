@@ -6,6 +6,8 @@ import subprocess
 import threading
 import http.server
 import socketserver
+import socket
+import webbrowser
 from functools import partial
 
 import atexit
@@ -17,7 +19,8 @@ from livekit import api
 load_dotenv(override=True)
 
 # --- HTTP Server for local frontend ---
-PORT = 5173
+DEFAULT_FRONTEND_PORT = 5173
+FALLBACK_UI_PORT = int(os.getenv("WHISPER_FALLBACK_UI_PORT", "7860"))
 ROOM_NAME = os.getenv("LIVEKIT_ROOM_NAME", "whisper-room")
 USER_IDENTITY = os.getenv("LIVEKIT_USER_IDENTITY", "user")
 USER_NAME = os.getenv("LIVEKIT_USER_NAME", "MSA")
@@ -30,6 +33,19 @@ DIST_DIR = os.path.join(
     "Ai UI interface",
     "dist",
 )
+
+
+def find_available_port(preferred_port: int) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", preferred_port))
+        except OSError:
+            sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+PORT = find_available_port(DEFAULT_FRONTEND_PORT)
 
 
 def start_server():
@@ -46,8 +62,10 @@ class Api:
         self.base_dir = BASE_DIR
         self.server_process = None
         self.agent_process = None
+        self.cloud_process = None
         self.server_log_handle = None
         self.agent_log_handle = None
+        self.cloud_log_handle = None
         self._connecting = False
         self._started = False  # Guard: only start services once
 
@@ -131,7 +149,14 @@ class Api:
             if not room_ready:
                 return False
 
-            existing = await lk_api.agent_dispatch.list_dispatch(room_name)
+            try:
+                existing = await lk_api.agent_dispatch.list_dispatch(room_name)
+            except Exception as e:
+                if "requested room does not exist" in str(e).lower():
+                    existing = []
+                else:
+                    raise e
+
             for dispatch in existing:
                 if dispatch.agent_name == AGENT_NAME:
                     print(f"[Backend] Agent dispatch already exists for room '{room_name}'.")
@@ -170,6 +195,9 @@ class Api:
                 print(f"[Backend] Failed to clear {log_name}: {e}")
 
     def _close_log_handles(self):
+        if self.cloud_log_handle and not self.cloud_log_handle.closed:
+            self.cloud_log_handle.flush()
+            self.cloud_log_handle.close()
         if self.agent_log_handle and not self.agent_log_handle.closed:
             self.agent_log_handle.flush()
             self.agent_log_handle.close()
@@ -178,6 +206,37 @@ class Api:
             self.server_log_handle.close()
         self.agent_log_handle = None
         self.server_log_handle = None
+        self.cloud_log_handle = None
+
+    def _start_cloud_fallback_ui(self):
+        if self.cloud_process and self.cloud_process.poll() is None:
+            return True
+
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONUNBUFFERED"] = "1"
+        python_exe = self._python_executable()
+
+        if self.cloud_log_handle is None or self.cloud_log_handle.closed:
+            self.cloud_log_handle = open(
+                os.path.join(self.base_dir, "cloud_api.log"),
+                "a",
+                encoding="utf-8",
+            )
+
+        self.cloud_process = subprocess.Popen(
+            [python_exe, "-u", "-m", "uvicorn", "cloud_api:app", "--host", "127.0.0.1", "--port", str(FALLBACK_UI_PORT)],
+            cwd=self.base_dir,
+            stdout=self.cloud_log_handle,
+            stderr=self.cloud_log_handle,
+            env=env,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        return True
+
+    def _frontend_url(self) -> str:
+        return f"http://127.0.0.1:{PORT}"
 
     def _kill_stale_processes(self):
         try:
@@ -391,6 +450,19 @@ class Api:
 
     def connect(self):
         """Start backend services with stale-process cleanup."""
+        if self._use_cloud_backend():
+            if self._started:
+                print("[Backend] Cloud backend already selected, skipping restart.")
+                return True
+            self._kill_stale_processes()
+            self._close_log_handles()
+            print(
+                f"[Backend] Desktop agent mode is '{self._desktop_agent_mode()}'; "
+                f"using cloud backend at {self._cloud_backend_url()}. Local backend services will stay off."
+            )
+            self._started = True
+            return True
+
         server_running = self.server_process and self.server_process.poll() is None
         agent_running = self.agent_process and self.agent_process.poll() is None
         if self._started and server_running and agent_running:
@@ -402,21 +474,12 @@ class Api:
         self._connecting = True
         self._started = False
         try:
-            if self._use_cloud_backend():
-                self._kill_stale_processes()
-                self._close_log_handles()
-                print(
-                    f"[Backend] Desktop agent mode is '{self._desktop_agent_mode()}'; "
-                    f"using cloud backend at {self._cloud_backend_url()} and skipping local worker startup."
-                )
-                self._started = True
-                return True
-
             self._kill_stale_processes()
 
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
             env["PYTHONUTF8"] = "1"
+            env["PYTHONUNBUFFERED"] = "1"
             python_exe = self._python_executable()
 
             print("Starting MCP Server...")
@@ -427,7 +490,7 @@ class Api:
                     encoding="utf-8",
                 )
             self.server_process = subprocess.Popen(
-                [python_exe, "server.py"],
+                [python_exe, "-u", "server.py"],
                 cwd=self.base_dir,
                 stdout=self.server_log_handle,
                 stderr=self.server_log_handle,
@@ -443,7 +506,7 @@ class Api:
                     encoding="utf-8",
                 )
             self.agent_process = subprocess.Popen(
-                [python_exe, "whisper_agent.py", "dev"],
+                [python_exe, "-u", "whisper_agent.py", "dev"],
                 cwd=self.base_dir,
                 stdout=self.agent_log_handle,
                 stderr=self.agent_log_handle,
@@ -458,6 +521,7 @@ class Api:
 
             if self._started:
                 self._ensure_agent_dispatch(room_name=ROOM_NAME)
+                self._start_cloud_fallback_ui()  # Ensure HTTP fallback is available
                 return True
 
             self.disconnect(clear_logs=False)
@@ -467,7 +531,7 @@ class Api:
 
     def disconnect(self, clear_logs: bool = False):
         print("[Backend] Stopping backend services...")
-        for proc_name in ("agent_process", "server_process"):
+        for proc_name in ("agent_process", "server_process", "cloud_process"):
             proc = getattr(self, proc_name)
             if not proc:
                 continue
@@ -516,7 +580,7 @@ if __name__ == "__main__":
 
     window = webview.create_window(
         "Whisper AI System",
-        url=f"http://localhost:{PORT}",
+        url=app_api._frontend_url(),
         js_api=app_api,
         width=1100,
         height=850,
@@ -527,4 +591,22 @@ if __name__ == "__main__":
         confirm_close=True,
     )
     # webview.start(debug=True)  # Uncomment for DevTools
-    webview.start()
+    gui_backend = (os.getenv("WEBVIEW_GUI") or "").strip().lower() or None
+
+    try:
+        if gui_backend:
+            webview.start(gui=gui_backend, debug=True)
+        else:
+            webview.start(debug=True)
+    except Exception as e:
+        print(f"[Backend] WebView failed, switching to browser UI: {e}")
+        if app_api._use_cloud_backend():
+            webbrowser.open(app_api._frontend_url())
+        else:
+            app_api._start_cloud_fallback_ui()
+            webbrowser.open(f"http://127.0.0.1:{FALLBACK_UI_PORT}")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
