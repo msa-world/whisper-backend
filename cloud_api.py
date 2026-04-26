@@ -23,6 +23,17 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    """Simple landing response so platform probes do not hit a 404."""
+    return {
+        "status": "ok",
+        "service": "Whisper Cloud API",
+        "healthz": "/healthz",
+        "livekit_config": "/livekit/config",
+    }
+
+
 async def ensure_room_exists(lk_api: api.LiveKitAPI, room_name: str) -> tuple[bool, str]:
     """Create the room if it does not already exist."""
     try:
