@@ -15,6 +15,9 @@ import json
 import asyncio
 import webbrowser
 import datetime
+import subprocess
+import shutil
+import urllib.parse
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -33,10 +36,15 @@ from livekit.plugins import google as lk_google
 from livekit.plugins import deepgram
 import google_tools
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger("whisper-agent")
 logger.setLevel(logging.INFO)
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -45,8 +53,14 @@ logger.setLevel(logging.INFO)
 GROQ_LLM_MODEL   = os.getenv("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
 GOOGLE_LLM_MODEL = os.getenv("GOOGLE_LLM_MODEL", "gemini-2.5-flash")
 LLM_PROVIDER     = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+ROOM_NAME        = os.getenv("LIVEKIT_ROOM_NAME", "whisper-room")
+AGENT_NAME       = os.getenv("LIVEKIT_AGENT_NAME", "whisper-assistant")
+DESKTOP_GREETING = os.getenv("DESKTOP_GREETING", "Whisper is online. How can I help you?")
+WHATSAPP_DEFAULT_PHONE = os.getenv("WHATSAPP_DEFAULT_PHONE", "").strip()
 if LLM_PROVIDER == "fallback":
     LLM_PROVIDER = "auto"
+if LLM_PROVIDER == "google":
+    LLM_PROVIDER = "gemini"
 PROFILE_PATH     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_profile.json")
 SCREENSHOTS_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "screenshots")
 
@@ -89,6 +103,10 @@ You are Whisper — a highly intelligent, calm, and warm personal AI assistant.
 - Real-time weather for any city (use get_weather tool)
 - Web search for current events, news, facts (use search_web tool)
 - Open YouTube to search songs or videos (use search_youtube tool)
+- Open desktop apps like WhatsApp, Chrome, Notepad, Calculator, Explorer, and Settings (use open_application tool)
+- Open WhatsApp quickly (use open_whatsapp tool)
+- Draft WhatsApp messages to a phone number or configured default number (use send_whatsapp_message tool)
+- Start a best-effort WhatsApp call flow for a phone number or configured default number (use start_whatsapp_call tool)
 - Take a screenshot of the screen (use take_screenshot tool)
 - Remember the user's name and title (use save_user_profile tool). When asked to update name/title, ALWAYS call this tool first, then confirm verbally.
 - Check remaining API limits and credits (use check_api_limits tool)
@@ -127,6 +145,53 @@ def _save_profile(profile: dict):
             json.dump(profile, f, indent=4)
     except Exception as e:
         logger.error("Failed to save profile: %s", e)
+
+
+def _open_target(target: str) -> None:
+    if sys.platform == "win32":
+        os.startfile(target)
+        return
+    webbrowser.open(target)
+
+
+def _clean_phone_number(phone_number: str | None) -> str:
+    raw = (phone_number or WHATSAPP_DEFAULT_PHONE or "").strip()
+    return "".join(ch for ch in raw if ch.isdigit())
+
+
+def _launch_app(app_name: str) -> tuple[bool, str]:
+    name = app_name.strip().lower()
+
+    app_map = {
+        "whatsapp": [("uri", "whatsapp:"), ("url", "https://web.whatsapp.com/")],
+        "chrome": [("exe", "chrome.exe"), ("url", "https://www.google.com/")],
+        "browser": [("url", "https://www.google.com/")],
+        "youtube": [("url", "https://www.youtube.com/")],
+        "notepad": [("exe", "notepad.exe")],
+        "calculator": [("exe", "calc.exe")],
+        "calc": [("exe", "calc.exe")],
+        "explorer": [("exe", "explorer.exe")],
+        "files": [("exe", "explorer.exe")],
+        "settings": [("uri", "ms-settings:")],
+    }
+
+    candidates = app_map.get(name)
+    if not candidates:
+        return False, f"I don't have a launcher preset for {app_name} yet."
+
+    last_error = None
+    for kind, value in candidates:
+        try:
+            if kind == "exe":
+                exe = shutil.which(value) or value
+                subprocess.Popen([exe])
+            else:
+                _open_target(value)
+            return True, f"Opened {app_name}."
+        except Exception as e:
+            last_error = e
+
+    return False, f"Failed to open {app_name}: {last_error}"
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -283,6 +348,57 @@ async def search_youtube(query: str) -> str:
 
 
 @lk_llm.function_tool
+async def open_application(app_name: str) -> str:
+    """Open a supported desktop application such as WhatsApp, Chrome, Notepad, Calculator, Explorer, or Settings."""
+    ok, message = _launch_app(app_name)
+    return message
+
+
+@lk_llm.function_tool
+async def open_whatsapp() -> str:
+    """Open WhatsApp Desktop or WhatsApp Web."""
+    ok, message = _launch_app("whatsapp")
+    return message
+
+
+@lk_llm.function_tool
+async def send_whatsapp_message(message: str, phone_number: str | None = None) -> str:
+    """Open a WhatsApp chat with a prefilled message for the given phone number or configured default number."""
+    phone = _clean_phone_number(phone_number)
+    if not phone:
+        return "No WhatsApp phone number is configured. Set WHATSAPP_DEFAULT_PHONE or provide a phone number."
+
+    text = urllib.parse.quote(message.strip())
+    url = f"https://wa.me/{phone}?text={text}"
+    try:
+        _open_target(url)
+        return f"Opened WhatsApp message draft for {phone}."
+    except Exception as e:
+        return f"Failed to open WhatsApp message draft: {e}"
+
+
+@lk_llm.function_tool
+async def start_whatsapp_call(phone_number: str | None = None, video: bool = False) -> str:
+    """Best-effort WhatsApp call helper. Opens the target chat or app for a voice or video call."""
+    phone = _clean_phone_number(phone_number)
+    if not phone:
+        return "No WhatsApp phone number is configured. Set WHATSAPP_DEFAULT_PHONE or provide a phone number."
+
+    deep_links = [
+        f"whatsapp://send?phone={phone}",
+        f"https://wa.me/{phone}",
+    ]
+    for link in deep_links:
+        try:
+            _open_target(link)
+            call_type = "video" if video else "voice"
+            return f"Opened WhatsApp for a {call_type} call with {phone}. You may need one manual click inside WhatsApp to place the call."
+        except Exception:
+            continue
+    return f"Failed to open WhatsApp call flow for {phone}."
+
+
+@lk_llm.function_tool
 async def take_screenshot() -> str:
     """Take a screenshot of the current screen and save it to the screenshots folder."""
     try:
@@ -384,15 +500,16 @@ async def open_world_monitor() -> str:
 # LLM factory with key rotation
 # ---------------------------------------------------------------------------
 
-def _make_groq_llm() -> lk_groq.LLM:
+def _make_groq_llm(api_key: str | None = None, key_index: int | None = None) -> lk_groq.LLM:
     """Create a Groq LLM instance with the current key."""
-    key = _get_groq_key()
+    key = api_key or _get_groq_key()
     if not key:
         raise RuntimeError("Groq LLM requested but no Groq API key is configured.")
 
+    index_for_log = _groq_key_index if key_index is None else key_index
     logger.info(
         "Creating Groq LLM with key index %d using model %s",
-        _groq_key_index,
+        index_for_log,
         GROQ_LLM_MODEL,
     )
     return lk_groq.LLM(
@@ -415,24 +532,55 @@ def _make_google_llm() -> lk_google.LLM:
 
 
 def _make_llm():
-    """Create the configured LLM, preferring Gemini in auto mode for stability."""
+    """Create the configured LLM with fallback so quota/rate-limit issues don't stall turns."""
     has_google = bool(os.getenv("GOOGLE_API_KEY"))
     has_groq = bool(_GROQ_KEYS)
 
+    if not has_google and not has_groq:
+        raise RuntimeError(
+            "No LLM provider configured. Set GOOGLE_API_KEY or GROQ_API_KEY/GROQ_API_KEY_1."
+        )
+
+    preferred_order: list[str]
     if LLM_PROVIDER == "gemini":
-        return _make_google_llm()
-    if LLM_PROVIDER == "groq":
-        return _make_groq_llm()
+        preferred_order = ["gemini", "groq"]
+    elif LLM_PROVIDER == "groq":
+        preferred_order = ["groq", "gemini"]
+    else:
+        preferred_order = ["groq", "gemini"] if has_groq else ["gemini", "groq"]
 
-    if has_google:
-        logger.info("LLM auto-select: using Gemini because GOOGLE_API_KEY is configured.")
-        return _make_google_llm()
-    if has_groq:
-        logger.info("LLM auto-select: Gemini unavailable, falling back to Groq.")
-        return _make_groq_llm()
+    llms: list = []
+    for provider_name in preferred_order:
+        if provider_name == "groq" and has_groq:
+            for idx, key in enumerate(_GROQ_KEYS):
+                llms.append(_make_groq_llm(api_key=key, key_index=idx))
+        elif provider_name == "gemini" and has_google:
+            llms.append(_make_google_llm())
 
-    raise RuntimeError(
-        "No LLM provider configured. Set GOOGLE_API_KEY or GROQ_API_KEY/GROQ_API_KEY_1."
+    if not llms:
+        raise RuntimeError("Unable to build LLM configuration from environment settings.")
+
+    if len(llms) == 1:
+        return llms[0]
+
+    timeout_raw = os.getenv("LLM_ATTEMPT_TIMEOUT", "8.0")
+    try:
+        attempt_timeout = max(2.0, float(timeout_raw))
+    except ValueError:
+        attempt_timeout = 8.0
+
+    chain = " -> ".join(f"{llm.provider}:{llm.model}" for llm in llms)
+    logger.warning(
+        "LLM failover chain enabled (%s). Preferred provider: %s",
+        chain,
+        LLM_PROVIDER,
+    )
+    return lk_llm.FallbackAdapter(
+        llm=llms,
+        attempt_timeout=attempt_timeout,
+        max_retry_per_llm=0,
+        retry_interval=0.2,
+        retry_on_chunk_sent=False,
     )
 
 
@@ -457,7 +605,7 @@ def _make_tts() -> deepgram.TTS:
     )
 
 
-async def _wait_for_frontend_participant(ctx: JobContext, timeout: float = 8.0) -> bool:
+async def _wait_for_frontend_participant(ctx: JobContext, timeout: float = 2.0) -> bool:
     """Wait briefly for the desktop/web client to join before sending the greeting."""
     if ctx.room.remote_participants:
         return True
@@ -472,7 +620,12 @@ async def _wait_for_frontend_participant(ctx: JobContext, timeout: float = 8.0) 
 
 def dev() -> None:
     """Project entry point used by `uv run whisper_voice`."""
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            agent_name=AGENT_NAME,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +633,10 @@ def dev() -> None:
 # ---------------------------------------------------------------------------
 
 async def entrypoint(ctx: JobContext):
+    print(f"\n[Agent] JOINING ROOM: {ctx.room.name}\n")
     logger.info("Agent: connecting to room %s", ctx.room.name)
+    if ROOM_NAME and ctx.room.name != ROOM_NAME:
+        logger.warning("Expected room %s but got %s", ROOM_NAME, ctx.room.name)
 
     stt = _make_stt()
     llm = _make_llm()
@@ -498,6 +654,10 @@ async def entrypoint(ctx: JobContext):
             get_weather,
             search_web,
             search_youtube,
+            open_application,
+            open_whatsapp,
+            send_whatsapp_message,
+            start_whatsapp_call,
             take_screenshot,
             check_api_limits,
             open_world_monitor,
@@ -518,7 +678,8 @@ async def entrypoint(ctx: JobContext):
 
     session = AgentSession(
         turn_detection="vad",
-        min_endpointing_delay=0.4,
+        min_endpointing_delay=0.15,
+        max_endpointing_delay=1.2,
     )
 
     # ── Session event logging ────────────────────────────────────────────────
@@ -560,19 +721,7 @@ async def entrypoint(ctx: JobContext):
         logger.warning("Frontend participant did not appear before greeting timeout")
 
     # ── Greeting ─────────────────────────────────────────────────────────────
-    profile = _load_profile()
-    name    = profile.get("name")
-    title   = profile.get("title")
-
-    if name:
-        address  = f"{title} {name}".strip() if title else name
-        greeting = f"Good day, {address}. Whisper is online and ready. How can I help you today?"
-    else:
-        greeting = (
-            "Hello! I'm Whisper, your personal AI assistant. "
-            "I'm ready to help. Just speak, and I'll listen. "
-            "If you'd like, you can tell me your name so I can address you properly."
-        )
+    greeting = DESKTOP_GREETING.strip() or "Whisper is online. How can I help you?"
 
     logger.info("Sending greeting: %s", greeting)
     try:
@@ -580,6 +729,7 @@ async def entrypoint(ctx: JobContext):
         logger.info("Greeting sent successfully.")
     except Exception as e:
         logger.error("Failed to send greeting: %s", e)
+
 
 
 if __name__ == "__main__":
