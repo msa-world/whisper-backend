@@ -31,9 +31,8 @@ RUN uv sync --frozen
 # Ensure start.sh is executable
 RUN chmod +x start.sh
 
-# Expose the port (Hugging Face uses 7860 by default)
-EXPOSE 7860
-ENV PORT=7860
+# Expose the port (Railway will set the PORT environment variable)
+EXPOSE 8000
 
 # Run the unified startup script
 CMD ["bash", "start.sh"]
