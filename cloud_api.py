@@ -11,6 +11,7 @@ from livekit import api
 # Import advanced features
 from advanced_features_api import router as advanced_features_router
 from models import init_db
+from i18n import i18n_router, init_translator
 
 load_dotenv()
 
@@ -37,6 +38,12 @@ app.add_middleware(
 
 # Register advanced features router
 app.include_router(advanced_features_router)
+
+# Register i18n router
+app.include_router(i18n_router)
+
+# Initialize translator
+init_translator("en")
 
 VOICE_APP_HTML = dedent(
     """
