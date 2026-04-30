@@ -241,6 +241,38 @@ class UserAnalytics(Base):
     user = relationship("User", back_populates="analytics")
 
 
+class UserDetectionMemory(Base):
+    """Store user's custom object labels learned from video calls"""
+    __tablename__ = "user_detection_memory"
+    
+    id = Column(String, primary_key=True, default=lambda: str(__import__('uuid').uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    object_label = Column(String, nullable=False)  # e.g., "laptop"
+    user_name = Column(String, nullable=False)  # e.g., "My MacBook Pro"
+    custom_info = Column(String, nullable=True)  # e.g., "silver 16-inch"
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DetectionHistory(Base):
+    """Store history of detected objects during video calls"""
+    __tablename__ = "detection_history"
+    
+    id = Column(String, primary_key=True, default=lambda: str(__import__('uuid').uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False)  # Video call session ID
+    
+    detected_objects = Column(String, nullable=False)  # JSON as string
+    summary = Column(String, nullable=True)  # Natural language summary
+    total_detections = Column(Integer, default=0)
+    processing_time = Column(Float, nullable=True)  # Processing duration in seconds
+    
+    camera_used = Column(String, default="front")  # "front" or "back"
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ============================================================================
 # DATABASE INITIALIZATION
 # ============================================================================

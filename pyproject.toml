@@ -31,6 +31,9 @@ dependencies = [
     "langchain>=0.1",  # Context management and RAG
     "pinecone-client>=3.0",  # Vector database for semantic search (optional)
     "cryptography>=41.0",  # Encryption for sensitive data
+    # Video & Object Detection (FREE - completely local)
+    "opencv-python>=4.8",  # Computer vision library
+    "ultralytics>=8.0",  # YOLOv8 object detection (free, lightweight, runs locally)
 ]
 
 [project.scripts]
