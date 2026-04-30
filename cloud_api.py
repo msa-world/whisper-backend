@@ -8,6 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from livekit import api
 
+# Import advanced features
+from advanced_features_api import router as advanced_features_router
+from models import init_db
+
 load_dotenv()
 
 ROOM_NAME = os.getenv("LIVEKIT_ROOM_NAME", "whisper-room")
@@ -16,6 +20,13 @@ AGENT_NAME = os.getenv("LIVEKIT_AGENT_NAME", "whisper-assistant")
 
 app = FastAPI(title="Whisper Cloud API")
 
+# Initialize database on startup
+try:
+    init_db()
+    print("[Whisper] Database initialized successfully")
+except Exception as e:
+    print(f"[Whisper] Database initialization warning: {e}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,6 +34,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register advanced features router
+app.include_router(advanced_features_router)
 
 VOICE_APP_HTML = dedent(
     """

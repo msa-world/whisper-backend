@@ -22,6 +22,15 @@ dependencies = [
     "google-auth-oauthlib",
     "fastapi",
     "uvicorn",
+    # Database
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",  # PostgreSQL adapter
+    "alembic>=1.13",  # Database migrations
+    # Advanced features
+    "redis>=5.0",  # Caching and sessions
+    "langchain>=0.1",  # Context management and RAG
+    "pinecone-client>=3.0",  # Vector database for semantic search (optional)
+    "cryptography>=41.0",  # Encryption for sensitive data
 ]
 
 [project.scripts]
