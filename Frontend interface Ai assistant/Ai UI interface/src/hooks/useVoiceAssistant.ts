@@ -119,21 +119,40 @@ export function useVoiceAssistant() {
 
     setStatus("connecting");
     setInterim("");
-    console.log("[Whisper] Connecting...");
+    const apiBase = getBrowserApiBase();
+    console.log("[Whisper] Connecting to API at:", apiBase);
 
     try {
       let config;
       if (window.pywebview && window.pywebview.api) {
+        console.log("[Whisper] Using pywebview API");
         // @ts-ignore
         config = await window.pywebview.api.get_livekit_config();
       } else {
-        console.warn(
-          `[Whisper] pywebview not found, using browser API at ${getBrowserApiBase()}`,
-        );
+        console.log("[Whisper] Attempting to fetch LiveKit config from backend...");
+        
+        // First, check if backend is healthy
+        try {
+          const healthResponse = await fetch(`${apiBase}/healthz`);
+          if (!healthResponse.ok) {
+            console.warn("[Whisper] Backend health check failed:", healthResponse.status, healthResponse.statusText);
+          } else {
+            console.log("[Whisper] Backend is healthy");
+          }
+        } catch (healthError) {
+          console.error("[Whisper] Backend health check error:", healthError);
+        }
+
+        console.log(`[Whisper] Fetching LiveKit config from ${apiBase}/livekit/config`);
         config = await fetchBrowserApiJson("/livekit/config");
       }
       const { url, token } = config;
-      if (!url || !token) throw new Error("Missing LiveKit URL or token");
+      console.log("[Whisper] LiveKit config received:", { url: url ? "present" : "missing", token: token ? "present" : "missing" });
+      if (!url || !token) {
+        const errorMsg = `Missing LiveKit configuration - URL: ${url ? "✓" : "✗"}, Token: ${token ? "✓" : "✗"}`;
+        console.error("[Whisper]", errorMsg);
+        throw new Error(errorMsg);
+      }
 
       const room = new LivekitClient.Room({
         adaptiveStream: true,
@@ -275,7 +294,12 @@ export function useVoiceAssistant() {
 
       setStatus("idle");
     } catch (error) {
-      console.error("[Whisper] Connection failed:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[Whisper] Connection failed:", {
+        error: errorMessage,
+        apiBase: getBrowserApiBase(),
+        timestamp: new Date().toISOString(),
+      });
       roomRef.current = null;
       stopAnalyser();
       closeAudioContext();
