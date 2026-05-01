@@ -639,16 +639,22 @@ def _make_tts() -> deepgram.TTS:
     )
 
 
-async def _wait_for_frontend_participant(ctx: JobContext, timeout: float = 2.0) -> bool:
-    """Wait briefly for the desktop/web client to join before sending the greeting."""
+async def _wait_for_frontend_participant(ctx: JobContext, timeout: float = 1.0) -> bool:
+    """Wait briefly for the desktop/web client to join before sending the greeting.
+    On Railway/cloud, frontend may take longer to connect, so we send greeting after short wait."""
+    logger.info("Waiting for frontend participant (timeout: %.1f seconds)...", timeout)
     if ctx.room.remote_participants:
+        logger.info("Frontend participant already connected!")
         return True
 
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
         if ctx.room.remote_participants:
+            logger.info("Frontend participant connected!")
             return True
         await asyncio.sleep(0.25)
+    
+    logger.warning("Frontend participant did not connect within %.1f seconds. Sending greeting anyway.", timeout)
     return False
 
 
@@ -752,7 +758,7 @@ async def entrypoint(ctx: JobContext):
     logger.info("Session started — waiting for frontend to subscribe…")
     frontend_ready = await _wait_for_frontend_participant(ctx)
     if not frontend_ready:
-        logger.warning("Frontend participant did not appear before greeting timeout")
+        logger.warning("Frontend participant did not appear before greeting timeout. Sending greeting anyway.")
 
     # ── Greeting ─────────────────────────────────────────────────────────────
     greeting = DESKTOP_GREETING.strip() or "Whisper is online. How can I help you?"
@@ -763,6 +769,17 @@ async def entrypoint(ctx: JobContext):
         logger.info("Greeting sent successfully.")
     except Exception as e:
         logger.error("Failed to send greeting: %s", e)
+    
+    # Keep the session alive and listening for user input
+    logger.info("Agent is now listening and ready to respond to user queries...")
+    try:
+        # The session will continue to run and handle user input until explicitly closed
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Agent session ended by user interrupt")
+    except Exception as e:
+        logger.error("Agent session error: %s", e)
 
 
 
