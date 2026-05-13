@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper AI Assistant - Voice Enabled</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-size: 12px;
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .chat-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message.assistant {
+            text-align: left;
+        }
+
+        .message-content {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
+
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: #e5e7eb;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #333;
+            flex: 1;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            color: #ef4444;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .recording-dot {
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            animation: recordingPulse 1s infinite;
+        }
+
+        @keyframes recordingPulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 5px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #999;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.7;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .alert.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .alert.error {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border: 1px solid #fecaca;
+        }
+
+        .alert.info {
+            background: #dbeafe;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Whisper AI</h1>
+            <p>Your Voice-Enabled AI Assistant</p>
+            <div class="status">
+                <div class="status-dot"></div>
+                <div class="status-text">Ready to listen</div>
+            </div>
+        </div>
+
+        <div id="alerts"></div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="message-content">
+                    Hi! I'm Whisper, your AI assistant. I'm ready to help! You can ask me about weather, search for information, find YouTube videos, or just chat. Click the microphone button to speak or type your question.
+                </div>
+                <div class="message-time">Now</div>
+            </div>
+        </div>
+
+        <div class="recording-indicator" id="recordingIndicator">
+            <div class="recording-dot"></div>
+            <span>Listening...</span>
+        </div>
+
+        <div class="input-group">
+            <input 
+                type="text" 
+                id="userInput" 
+                placeholder="Type or speak your question..."
+                autocomplete="off"
+            />
+            <button class="btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-secondary" onclick="startListening()">🎤 Speak</button>
+            <button class="btn-secondary" onclick="askWeather()">🌤️ Weather</button>
+            <button class="btn-secondary" onclick="askYouTube()">📺 YouTube</button>
+            <button class="btn-danger" onclick="clearChat()">Clear</button>
+        </div>
+    </div>
+
+    <script>
+        console.log('[v0] Whisper AI - Initializing...');
+        
+        // Initialize Speech APIs
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const synth = window.speechSynthesis;
+        
+        let recognition = null;
+        let isListening = false;
+        let messages = [];
+        
+        // Initialize recognition if available
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            console.log('[v0] Speech Recognition initialized');
+        } else {
+            console.warn('[v0] Speech Recognition not available - voice input disabled');
+        }
+        
+        // Setup recognition events
+        if (recognition) {
+            recognition.onstart = () => {
+                console.log('[v0] Listening started');
+                isListening = true;
+                document.getElementById('recordingIndicator').classList.add('active');
+            };
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                if (event.results[0].isFinal) {
+                    console.log('[v0] Transcript:', transcript);
+                    document.getElementById('userInput').value = transcript;
+                    sendMessage();
+                }
+            };
+
+            recognition.onend = () => {
+                console.log('[v0] Listening ended');
+                isListening = false;
+                document.getElementById('recordingIndicator').classList.remove('active');
+            };
+
+            recognition.onerror = (event) => {
+                console.error('[v0] Recognition error:', event.error);
+                showAlert(`Microphone error: ${event.error}`, 'error');
+                isListening = false;
+                document.getElementById('recordingIndicator').classList.remove('active');
+            };
+        }
+
+        // Speak greeting on page load
+        window.addEventListener('load', () => {
+            console.log('[v0] Page loaded, speaking greeting in 500ms');
+            setTimeout(() => {
+                const greeting = "Hi! I'm Whisper, your AI assistant. You can ask me about weather, search for information, find YouTube videos, or just chat. I'm ready to help!";
+                console.log('[v0] Speaking greeting');
+                speakText(greeting);
+            }, 500);
+        });
+
+        // Allow Enter key to send
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function startListening() {
+            if (!recognition) {
+                showAlert('Voice input is not supported in your browser. Please use Chrome, Edge, or Safari.', 'error');
+                return;
+            }
+            if (isListening) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            console.log('[v0] User input:', message);
+            addMessage(message, 'user');
+            input.value = '';
+            
+            showTypingIndicator();
+            
+            // Process message after short delay
+            setTimeout(async () => {
+                const response = await processQuery(message);
+                console.log('[v0] Response:', response);
+                removeTypingIndicator();
+                addMessage(response, 'assistant');
+                speakText(response);
+            }, 500);
+        }
+
+        async function processQuery(query) {
+            const q = query.toLowerCase();
+            
+            // Weather
+            if (q.includes('weather') || q.includes('temperature')) {
+                for (let word of ['in', 'at', 'for']) {
+                    if (q.includes(word)) {
+                        const location = query.split(word)[1].trim().replace('?', '');
+                        return await getWeather(location);
+                    }
+                }
+                return await getWeather('London');
+            }
+            
+            // YouTube
+            if (q.includes('youtube') || (q.includes('search') && q.includes('video'))) {
+                const term = query.replace(/youtube|search/gi, '').trim().replace('?', '');
+                return `Here are YouTube suggestions for "${term}": Tutorial for ${term}, Best practices in ${term}, How to do ${term}, ${term} explained, Advanced ${term} techniques.`;
+            }
+            
+            // Web search
+            if (q.includes('search')) {
+                const term = query.replace(/search|for/gi, '').trim().replace('?', '');
+                return `I found information about ${term}. ${term} is an interesting topic with many applications. You can search Wikipedia, Stack Overflow, or Google for more details.`;
+            }
+            
+            // Time
+            if (q.includes('time')) {
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return `The current time is ${time}.`;
+            }
+            
+            // Date
+            if (q.includes('date')) {
+                const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+                return `Today is ${date}.`;
+            }
+            
+            // Greetings
+            if (['hello', 'hi', 'hey', 'how are you'].some(g => q.includes(g))) {
+                const greetings = [
+                    "Hello! I'm doing great. How can I help you?",
+                    "Hi there! What would you like to know?",
+                    "Hey! I'm ready to help. What do you need?",
+                    "Hello! What can I assist you with today?"
+                ];
+                return greetings[Math.floor(Math.random() * greetings.length)];
+            }
+            
+            // Default
+            return `That's an interesting question about "${query}". I can help you with weather, search for topics, find YouTube videos, tell the time, and answer general questions. What else would you like to know?`;
+        }
+
+        async function getWeather(location) {
+            try {
+                console.log('[v0] Fetching weather for:', location);
+                const geoRes = await fetch(
+                    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`
+                );
+                const geoData = await geoRes.json();
+                
+                if (!geoData.results || geoData.results.length === 0) {
+                    return `I couldn't find weather data for ${location}. Try another location.`;
+                }
+                
+                const result = geoData.results[0];
+                const weatherRes = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${result.latitude}&longitude=${result.longitude}&current=temperature_2m,weather_code,wind_speed_10m,humidity&temperature_unit=fahrenheit`
+                );
+                const weatherData = await weatherRes.json();
+                const curr = weatherData.current;
+                
+                const weatherDesc = {
+                    0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+                    45: 'Foggy', 51: 'Light drizzle', 61: 'Slight rain', 80: 'Rain showers', 95: 'Thunderstorm'
+                };
+                
+                const desc = weatherDesc[curr.weather_code] || 'Unknown weather';
+                return `Weather in ${result.name}, ${result.country}: ${Math.round(curr.temperature_2m)} degrees Fahrenheit. ${desc}. Wind speed is ${Math.round(curr.wind_speed_10m)} miles per hour. Humidity is ${curr.humidity} percent.`;
+            } catch (error) {
+                console.error('[v0] Weather error:', error);
+                return `I couldn't fetch weather data right now. Please check your internet connection and try again.`;
+            }
+        }
+
+        function askWeather() {
+            document.getElementById('userInput').value = 'What is the weather in London?';
+            sendMessage();
+        }
+
+        function askYouTube() {
+            document.getElementById('userInput').value = 'Search YouTube for machine learning tutorial';
+            sendMessage();
+        }
+
+        function clearChat() {
+            document.getElementById('chatContainer').innerHTML = '';
+            messages = [];
+            console.log('[v0] Chat cleared');
+        }
+
+        function addMessage(text, role) {
+            const container = document.getElementById('chatContainer');
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="message-content">${escapeHtml(text)}</div>
+                <div class="message-time">${time}</div>
+            `;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+            messages.push({ text, role, time });
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chatContainer');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message assistant';
+            msgDiv.id = 'typingIndicator';
+            msgDiv.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) indicator.remove();
+        }
+
+        function speakText(text) {
+            if (!synth) {
+                console.warn('[v0] Speech Synthesis not available');
+                return;
+            }
+
+            if (synth.speaking) {
+                synth.cancel();
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.95;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            utterance.onstart = () => console.log('[v0] Speaking');
+            utterance.onend = () => console.log('[v0] Speaking ended');
+            utterance.onerror = (e) => console.error('[v0] Speech error:', e.error);
+            
+            console.log('[v0] Speaking text (first 50 chars):', text.substring(0, 50) + '...');
+            synth.speak(utterance);
+        }
+
+        function showAlert(message, type = 'info') {
+            const alertsDiv = document.getElementById('alerts');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert ${type}`;
+            alertDiv.textContent = message;
+            alertsDiv.appendChild(alertDiv);
+            
+            setTimeout(() => alertDiv.remove(), 4000);
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        console.log('[v0] Whisper AI fully initialized and ready!');
+        showAlert('Whisper AI is ready! You will hear a greeting now.', 'success');
+    </script>
+</body>
+</html>
