@@ -629,14 +629,34 @@
         }
 
         function speakText(text) {
+            if (!synth) {
+                console.error('[v0] Speech Synthesis not available');
+                return;
+            }
+
             if (synth.speaking) {
+                console.log('[v0] Canceling previous speech');
                 synth.cancel();
             }
 
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1;
-            utterance.pitch = 1;
-            utterance.volume = 1;
+            utterance.rate = 0.9; // Slightly slower for better clarity
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            utterance.onstart = () => {
+                console.log('[v0] Speech started');
+            };
+            
+            utterance.onend = () => {
+                console.log('[v0] Speech ended');
+            };
+            
+            utterance.onerror = (event) => {
+                console.error('[v0] Speech error:', event.error);
+            };
+            
+            console.log('[v0] Speaking text:', text.substring(0, 50) + '...');
             synth.speak(utterance);
         }
 
@@ -730,8 +750,21 @@
             }
         });
 
-        // Show startup message
-        showAlert('Whisper AI Assistant is ready! Click the microphone button or type to start.', 'success');
+        // Initialize and speak greeting when page loads
+        window.addEventListener('load', () => {
+            console.log('[v0] Page loaded, initializing Whisper AI');
+            
+            // Speak greeting message
+            setTimeout(() => {
+                const greetingText = "Hi! I'm Whisper, your AI assistant. You can ask me about weather, search the web, find YouTube videos, or just chat. Click the microphone button to speak or type your question!";
+                console.log('[v0] Speaking greeting: ' + greetingText);
+                speakText(greetingText);
+            }, 500);
+            
+            // Show startup message
+            showAlert('Whisper AI Assistant is ready! Click the microphone button or type to start.', 'success');
+            console.log('[v0] Whisper AI initialized and ready');
+        });
     </script>
 </body>
 </html>
