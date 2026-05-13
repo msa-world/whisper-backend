@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper AI Assistant - Voice Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d1b4e 50%, #1a2d4d 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .title {
+            font-size: 2.5em;
+            font-weight: 300;
+            letter-spacing: 8px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            font-size: 0.9em;
+            color: #aaa;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 1.1em;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            color: #4caf50;
+        }
+
+        .status.ready {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            color: #4caf50;
+        }
+
+        .status.listening {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+        }
+
+        .status.speaking {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            color: #2196f3;
+        }
+
+        .chat-container {
+            background: rgba(30, 30, 46, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease-in-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            background: rgba(33, 150, 243, 0.2);
+            border-left: 4px solid #2196f3;
+            margin-left: 20px;
+            text-align: right;
+        }
+
+        .message.assistant {
+            background: rgba(76, 175, 80, 0.2);
+            border-left: 4px solid #4caf50;
+            margin-right: 20px;
+        }
+
+        .message-label {
+            font-size: 0.8em;
+            opacity: 0.7;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .message-text {
+            font-size: 1em;
+            word-wrap: break-word;
+        }
+
+        .message-time {
+            font-size: 0.75em;
+            opacity: 0.5;
+            margin-top: 4px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .input-field::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-speak {
+            background: linear-gradient(135deg, #2196f3, #1976d2);
+            color: white;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-speak:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(33, 150, 243, 0.4);
+        }
+
+        .btn-speak:active {
+            transform: translateY(0);
+        }
+
+        .btn-speak.listening {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
+            }
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, #4caf50, #388e3c);
+            color: white;
+        }
+
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+        }
+
+        .btn-clear {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 12px 16px;
+        }
+
+        .btn-clear:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .info-box {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            text-align: center;
+            color: #ffc107;
+            margin-top: 20px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: currentColor;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: blink 1.4s infinite;
+        }
+
+        .loading:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .loading:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes blink {
+            0%, 60%, 100% {
+                opacity: 0.5;
+            }
+            30% {
+                opacity: 1;
+            }
+        }
+
+        .mic-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .transcription-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 0.9em;
+            color: #ccc;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            padding: 40px 20px;
+        }
+
+        .greeting-message {
+            animation: pulse-text 1s ease-in-out;
+        }
+
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">WHISPER AI</div>
+            <div class="subtitle">Voice Assistant</div>
+        </div>
+
+        <div class="status ready" id="status">Ready to listen - Click "Speak" or type your question</div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="empty-state">
+                <div style="font-size: 1.2em; margin-bottom: 10px;">👋 Welcome to Whisper AI</div>
+                <div>Start speaking or type a question to begin</div>
+            </div>
+        </div>
+
+        <div class="transcription-box" id="transcription">
+            <div>Waiting for input...</div>
+        </div>
+
+        <div class="input-container">
+            <input 
+                type="text" 
+                class="input-field" 
+                id="userInput" 
+                placeholder="Type or click 'Speak' to talk to Whisper..."
+                autocomplete="off"
+            />
+            <button class="btn btn-send" id="sendBtn">Send</button>
+        </div>
+
+        <div class="button-group">
+            <button class="btn btn-speak" id="speakBtn">🎤 Speak to Whisper</button>
+            <button class="btn btn-clear" id="clearBtn">Clear Chat</button>
+        </div>
+
+        <div class="info-box">
+            Try asking: "What is the weather in New York?", "YouTube python tutorial", or just "Hello"
+        </div>
+    </div>
+
+    <script>
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        const synth = window.speechSynthesis;
+
+        // Elements
+        const chatContainer = document.getElementById('chatContainer');
+        const statusEl = document.getElementById('status');
+        const transcriptionEl = document.getElementById('transcription');
+        const speakBtn = document.getElementById('speakBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const userInput = document.getElementById('userInput');
+
+        let isListening = false;
+        let messages = [];
+
+        // Configuration
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        // Show greeting on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addMessage('assistant', 'Hi! I\'m Whisper, your AI assistant. You can ask me about weather, search for videos, find information, or just chat. Click the "Speak to Whisper" button or type to start!');
+                speak('Hi! I\'m Whisper, your AI assistant. You can ask me about weather, search for videos, find information, or just chat. Click the Speak button to start!');
+            }, 500);
+        });
+
+        // Speech Recognition Events
+        recognition.onstart = () => {
+            isListening = true;
+            speakBtn.classList.add('listening');
+            speakBtn.textContent = '🎙️ Listening...';
+            statusEl.className = 'status listening';
+            statusEl.textContent = 'Listening... Speak now';
+            transcriptionEl.textContent = 'Listening for your voice...';
+        };
+
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            // Show live transcription
+            const displayText = finalTranscript || interimTranscript;
+            transcriptionEl.textContent = displayText || 'Listening...';
+
+            if (finalTranscript) {
+                userInput.value = finalTranscript.trim();
+            }
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            speakBtn.classList.remove('listening');
+            speakBtn.textContent = '🎤 Speak to Whisper';
+            statusEl.className = 'status ready';
+            statusEl.textContent = 'Ready to listen';
+
+            if (userInput.value.trim()) {
+                processInput(userInput.value.trim());
+                userInput.value = '';
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            statusEl.className = 'status';
+            statusEl.textContent = 'Error: ' + event.error;
+            transcriptionEl.textContent = 'Error: Could not understand. Please try again.';
+        };
+
+        // Speak function
+        function speak(text) {
+            if (synth.speaking) {
+                synth.cancel();
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.95;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+
+            utterance.onstart = () => {
+                statusEl.className = 'status speaking';
+                statusEl.textContent = 'Speaking...';
+            };
+
+            utterance.onend = () => {
+                statusEl.className = 'status ready';
+                statusEl.textContent = 'Ready to listen - Click "Speak" to continue';
+            };
+
+            synth.speak(utterance);
+        }
+
+        // Add message to chat
+        function addMessage(role, text) {
+            messages.push({ role, text, time: new Date().toLocaleTimeString() });
+
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${role}`;
+
+            messageEl.innerHTML = `
+                <div class="message-label">${role === 'user' ? 'You' : 'Whisper AI'}</div>
+                <div class="message-text">${text}</div>
+                <div class="message-time">${new Date().toLocaleTimeString()}</div>
+            `;
+
+            chatContainer.appendChild(messageEl);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Process user input and generate response
+        function processInput(input) {
+            if (!input.trim()) return;
+
+            // Add user message to chat
+            addMessage('user', input);
+            transcriptionEl.textContent = 'You: ' + input;
+
+            // Generate response based on input
+            let response = generateResponse(input);
+
+            // Add assistant response to chat
+            setTimeout(() => {
+                addMessage('assistant', response);
+                transcriptionEl.textContent = 'Whisper: ' + response;
+                speak(response);
+            }, 500);
+        }
+
+        // Generate AI response
+        function generateResponse(input) {
+            const lower = input.toLowerCase();
+
+            // Weather
+            if (lower.includes('weather') || lower.includes('temperature')) {
+                const location = extractLocation(input);
+                return `The weather in ${location} is partly cloudy, 72 degrees Fahrenheit, with 5 mile per hour winds. Perfect day outside!`;
+            }
+
+            // YouTube
+            if (lower.includes('youtube')) {
+                const query = input.replace(/youtube|search/gi, '').trim();
+                return `I found several YouTube videos about ${query}. You can search for "${query}" on YouTube to watch tutorials and guides.`;
+            }
+
+            // Time
+            if (lower.includes('time') || lower.includes('what time')) {
+                return `The current time is ${new Date().toLocaleTimeString()}`;
+            }
+
+            // Date
+            if (lower.includes('date') || lower.includes('what date')) {
+                return `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+            }
+
+            // Search
+            if (lower.includes('search')) {
+                const query = input.replace(/search|for/gi, '').trim();
+                return `I found information about ${query}. Here are the top results: artificial intelligence is a rapidly growing field in technology that focuses on creating intelligent machines capable of learning and reasoning like humans.`;
+            }
+
+            // Greeting
+            if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
+                return 'Hello! I\'m Whisper, your AI assistant. How can I help you today?';
+            }
+
+            // Default response
+            return 'That\'s interesting! I can help you search the web, find videos, get weather information, and answer general questions. What would you like to know?';
+        }
+
+        // Extract location from input
+        function extractLocation(input) {
+            const locations = ['new york', 'london', 'paris', 'tokyo', 'sydney', 'california', 'texas'];
+            for (let loc of locations) {
+                if (input.toLowerCase().includes(loc)) {
+                    return loc.charAt(0).toUpperCase() + loc.slice(1);
+                }
+            }
+            return 'your location';
+        }
+
+        // Event Listeners
+        speakBtn.addEventListener('click', () => {
+            if (!isListening) {
+                recognition.start();
+            } else {
+                recognition.stop();
+            }
+        });
+
+        sendBtn.addEventListener('click', () => {
+            if (userInput.value.trim()) {
+                processInput(userInput.value.trim());
+                userInput.value = '';
+            }
+        });
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if (confirm('Clear all chat history?')) {
+                chatContainer.innerHTML = '<div class="empty-state"><div style="font-size: 1.2em; margin-bottom: 10px;">Chat cleared</div><div>Start a new conversation</div></div>';
+                messages = [];
+                transcriptionEl.textContent = 'Chat cleared. Ready to start fresh!';
+            }
+        });
+
+        // Request microphone permission on load
+        navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
+            statusEl.textContent = 'Please allow microphone access to use voice features';
+        });
+    </script>
+</body>
+</html>
