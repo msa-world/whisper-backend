@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = "idle" | "listening" | "speaking" | "connecting" | "error";
 
-// Backend API URL
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+// Backend API URL - use hardcoded localhost for development
+const API_BASE = "http://localhost:8000";
 
 // Offline fallback responses
 function getOfflineResponse(input: string): string {
