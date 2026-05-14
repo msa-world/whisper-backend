@@ -2,71 +2,37 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Status = "idle" | "listening" | "speaking" | "connecting" | "error";
 
-// AI responses for different queries
-function getAIResponse(input: string): string {
+// Backend API URL
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
+// Offline fallback responses
+function getOfflineResponse(input: string): string {
   const lower = input.toLowerCase().trim();
-  
-  // Weather queries
-  if (lower.includes("weather")) {
-    const temp = Math.floor(Math.random() * 30) + 50;
-    const conditions = ["sunny", "partly cloudy", "cloudy", "clear"][Math.floor(Math.random() * 4)];
-    return `The weather is ${conditions} with a temperature of ${temp} degrees Fahrenheit. It's a great day!`;
+
+  if (["hello", "hi", "hey", "greetings"].some((w) => lower.includes(w))) {
+    return "Hi! I'm Whisper. I'm your AI assistant with a beautiful young girl voice!";
   }
-  
-  // Time queries
-  if (lower.includes("time") || lower.includes("what time")) {
+  if (["time", "what's the time", "current time"].some((w) => lower.includes(w))) {
     return `The current time is ${new Date().toLocaleTimeString()}.`;
   }
-  
-  // Date queries
-  if (lower.includes("date") || lower.includes("what day") || lower.includes("today")) {
-    return `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
+  if (["date", "what's the date", "today"].some((w) => lower.includes(w))) {
+    return `Today is ${new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })}.`;
   }
-  
-  // YouTube queries
-  if (lower.includes("youtube") || lower.includes("video")) {
-    const topic = lower.replace(/youtube|video|search|for|find/gi, "").trim() || "tutorial";
-    return `I found several YouTube videos about ${topic}. You can search for "${topic}" on YouTube to watch great tutorials and guides.`;
-  }
-  
-  // Search queries
-  if (lower.includes("search") || lower.includes("find") || lower.includes("look up")) {
-    const topic = lower.replace(/search|find|look up|for|about/gi, "").trim() || "that topic";
-    return `I found information about ${topic}. This is a fascinating subject with lots of resources available online.`;
-  }
-  
-  // Greetings
-  if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey") || lower === "good morning" || lower === "good afternoon" || lower === "good evening") {
-    return "Hello! I'm Whisper, your AI assistant. How can I help you today?";
-  }
-  
-  // Thanks
-  if (lower.includes("thank")) {
-    return "You're welcome! Is there anything else I can help you with?";
-  }
-  
-  // How are you
-  if (lower.includes("how are you")) {
-    return "I'm doing great, thank you for asking! I'm here and ready to help you with anything you need.";
-  }
-  
-  // Who are you
-  if (lower.includes("who are you") || lower.includes("what are you")) {
-    return "I'm Whisper, your AI voice assistant. I can help you with weather, search the web, find YouTube videos, answer questions, and much more!";
-  }
-  
-  // Math
-  if (/\d+\s*[\+\-\*\/]\s*\d+/.test(lower)) {
+  if (["+", "-", "*", "/"].some((w) => lower.includes(w))) {
     try {
-      const result = eval(lower.replace(/[^0-9\+\-\*\/\.\(\)]/g, ""));
+      const result = eval(lower.replace(/[^0-9+\-*/.()]/g, ""));
       return `The answer is ${result}.`;
     } catch {
-      return "I couldn't calculate that. Could you try again with a simpler expression?";
+      return "I can help with math. Could you rephrase your question?";
     }
   }
-  
-  // Default response
-  return `I heard you say: "${input}". That's an interesting question! I'm here to help you with weather, searches, YouTube videos, and general questions.`;
+
+  return "I'm working offline right now. Please ensure you have an internet connection to use Groq and Gemini APIs for full responses.";
 }
 
 export function useVoiceAssistant() {
@@ -148,45 +114,108 @@ export function useVoiceAssistant() {
     }
   }, [stopAnalyser]);
 
-  // Speak text using Web Speech API
-  const speak = useCallback((text: string) => {
+  // Speak text using ElevenLabs TTS via backend (with browser fallback)
+  const speak = useCallback(async (text: string) => {
+    console.log("[Whisper] Speaking via TTS:", text.substring(0, 50) + "...");
+    setStatus("speaking");
+    setReply(text);
+
+    try {
+      // Try ElevenLabs TTS via backend API
+      const response = await fetch(`${API_BASE}/api/voice/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (response.ok) {
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+
+        audio.onended = () => {
+          setStatus("idle");
+          console.log("[Whisper] Finished speaking (ElevenLabs)");
+        };
+
+        audio.onerror = () => {
+          console.warn("[Whisper] Audio playback failed, falling back to browser TTS");
+          useBrowserTTS(text);
+        };
+
+        audio.play().catch(() => {
+          console.warn("[Whisper] Could not play audio, using browser TTS");
+          useBrowserTTS(text);
+        });
+      } else {
+        console.warn("[Whisper] ElevenLabs API failed, using browser TTS");
+        useBrowserTTS(text);
+      }
+    } catch (error) {
+      console.warn("[Whisper] TTS error:", error);
+      useBrowserTTS(text);
+    }
+  }, []);
+
+  // Browser speech synthesis fallback
+  const useBrowserTTS = useCallback((text: string) => {
     if (!synthRef.current) {
       synthRef.current = window.speechSynthesis;
     }
-    
-    // Cancel any ongoing speech
+
     synthRef.current.cancel();
-    
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
-    utterance.pitch = 1.0;
+    utterance.pitch = 1.2; // Higher pitch for young girl voice effect
     utterance.volume = 1.0;
-    
+
     utterance.onstart = () => {
-      setStatus("speaking");
-      console.log("[Whisper] Speaking:", text.substring(0, 50) + "...");
+      console.log("[Whisper] Speaking via browser TTS");
     };
-    
+
     utterance.onend = () => {
       setStatus("idle");
-      console.log("[Whisper] Finished speaking");
+      console.log("[Whisper] Finished speaking (browser TTS)");
     };
-    
+
     utterance.onerror = (event) => {
       console.error("[Whisper] Speech error:", event.error);
       setStatus("idle");
     };
-    
-    setReply(text);
+
     synthRef.current.speak(utterance);
   }, []);
 
-  // Process user input and generate response
-  const processInput = useCallback((text: string) => {
-    console.log("[Whisper] Processing input:", text);
-    const response = getAIResponse(text);
-    speak(response);
-  }, [speak]);
+  // Process user input and generate response via backend API (Groq/Gemini)
+  const processInput = useCallback(
+    async (text: string) => {
+      console.log("[Whisper] Processing input via Groq/Gemini API:", text);
+
+      try {
+        const response = await fetch(`${API_BASE}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("[Whisper] API response:", data);
+        await speak(data.ai_response);
+      } catch (error) {
+        console.error("[Whisper] API error:", error);
+        // Fallback to offline response
+        const fallbackResponse = getOfflineResponse(text);
+        console.log("[Whisper] Using offline fallback response");
+        await speak(fallbackResponse);
+      }
+    },
+    [speak]
+  );
 
   // Connect (initialize voice recognition)
   const connect = useCallback(async () => {
@@ -273,11 +302,13 @@ export function useVoiceAssistant() {
       
       console.log("[Whisper] Voice assistant initialized successfully!");
       
-      // Speak greeting automatically
+      // Speak greeting automatically with backend TTS
       if (!greetingSpokenRef.current) {
         greetingSpokenRef.current = true;
-        setTimeout(() => {
-          speak("Hi! I'm Whisper, your AI assistant. You can ask me about weather, search the web, find YouTube videos, or just chat. Tap the button to speak!");
+        setTimeout(async () => {
+          await speak(
+            "Hi! I'm Whisper, your AI assistant with a beautiful young girl voice! I'm powered by Groq and Gemini AI. You can ask me about weather, search the web, find videos, or just chat. Tap the button to speak!"
+          );
         }, 500);
       }
       
