@@ -13,6 +13,7 @@ from advanced_features_api import router as advanced_features_router
 from models import init_db
 from i18n import i18n_router, init_translator
 from video_call_api import router as video_call_router
+from voice_api_router import router as voice_router
 
 load_dotenv()
 
@@ -45,6 +46,9 @@ app.include_router(i18n_router)
 
 # Register video call router with object detection
 app.include_router(video_call_router)
+
+# Register voice API router (new comprehensive AI assistant)
+app.include_router(voice_router)
 
 # Initialize translator
 init_translator("en")
