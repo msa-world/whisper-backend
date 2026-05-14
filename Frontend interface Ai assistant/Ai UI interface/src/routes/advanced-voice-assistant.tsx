@@ -47,6 +47,7 @@ export function AdvancedVoiceAssistant() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const transcriptTimeoutRef = useRef<NodeJS.Timeout>();
+  const finalTranscriptRef = useRef<string>('');  // Store final transcript in ref to avoid stale closure
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -89,6 +90,15 @@ export function AdvancedVoiceAssistant() {
       const displayText = finalTranscript || interimTranscript;
       setLiveTranscript(displayText);
       setLiveCaption(displayText);
+      
+      // Store final transcript in ref to avoid stale closure in onend
+      if (finalTranscript) {
+        finalTranscriptRef.current = finalTranscript;
+        console.log('[v0] Final transcript captured:', finalTranscript);
+      } else if (interimTranscript) {
+        // Update ref with interim too so we have something if recognition ends abruptly
+        finalTranscriptRef.current = interimTranscript;
+      }
 
       // Clear caption after a delay if no new input
       if (transcriptTimeoutRef.current) {
@@ -111,34 +121,63 @@ export function AdvancedVoiceAssistant() {
     };
 
     recognition.onend = async () => {
+      console.log('[v0] Recognition ended, transcript ref:', finalTranscriptRef.current);
+      
       setAppState((prev) => ({
         ...prev,
         isListening: false,
       }));
 
-      if (liveTranscript.trim()) {
+      // Use ref value to avoid stale closure issue
+      const capturedTranscript = finalTranscriptRef.current.trim();
+      
+      if (capturedTranscript) {
+        console.log('[v0] Processing user input:', capturedTranscript);
+        
         // Add user message
         const userMessage: Message = {
           id: Date.now().toString(),
           role: 'user',
-          text: liveTranscript,
+          text: capturedTranscript,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
 
+        // Clear the ref for next use
+        finalTranscriptRef.current = '';
+        setLiveTranscript('');
+        
         // Generate AI response
-        await generateAndSpeakResponse(liveTranscript);
+        await generateAndSpeakResponse(capturedTranscript);
+      } else {
+        console.log('[v0] No transcript captured');
+        setLiveTranscript('');
+        finalTranscriptRef.current = '';
       }
-
-      setLiveTranscript('');
     };
 
     recognitionRef.current = recognition;
 
+    // Speak greeting on first load
+    setTimeout(() => {
+      const greeting = "Hi! I'm your advanced voice assistant. Click Start Listening to speak with me, or type your message below.";
+      speakWithBrowserAPI(greeting);
+      
+      // Add greeting message
+      const greetingMessage: Message = {
+        id: 'greeting',
+        role: 'ai',
+        text: greeting,
+        timestamp: new Date(),
+      };
+      setMessages([greetingMessage]);
+    }, 500);
+
     return () => {
       recognition.abort();
     };
-  }, [liveTranscript]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -272,6 +311,8 @@ export function AdvancedVoiceAssistant() {
 
   // Generate and speak AI response
   const generateAndSpeakResponse = async (userInput: string): Promise<void> => {
+    console.log('[v0] generateAndSpeakResponse called with:', userInput);
+    
     setAppState((prev) => ({
       ...prev,
       status: 'thinking',
@@ -281,6 +322,7 @@ export function AdvancedVoiceAssistant() {
     await new Promise((resolve) => setTimeout(resolve, 800));
 
     const aiResponse = getMockAIResponse(userInput);
+    console.log('[v0] AI response generated:', aiResponse);
 
     // Add AI message
     const aiMessage: Message = {
@@ -290,8 +332,10 @@ export function AdvancedVoiceAssistant() {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, aiMessage]);
+    console.log('[v0] AI message added to chat');
 
     // Speak response
+    console.log('[v0] Speaking response...');
     await speakWithElevenLabs(aiResponse);
   };
 
